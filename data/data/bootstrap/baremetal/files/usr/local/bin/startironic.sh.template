@@ -1,5 +1,6 @@
 #!/bin/bash
 set -ex
+exit 1
 
 . /usr/local/bin/release-image.sh
 
