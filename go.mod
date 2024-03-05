@@ -41,6 +41,7 @@ require (
 	github.com/diskfs/go-diskfs v1.4.0
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible
 	github.com/go-openapi/errors v0.22.0
+	github.com/go-openapi/runtime v0.26.2
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/go-openapi/swag v0.22.9
 	github.com/go-playground/validator/v10 v10.19.0
@@ -177,7 +178,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/jsonreference v0.20.4 // indirect
 	github.com/go-openapi/loads v0.21.3 // indirect
-	github.com/go-openapi/runtime v0.26.2 // indirect
 	github.com/go-openapi/spec v0.20.12 // indirect
 	github.com/go-openapi/validate v0.22.4 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
