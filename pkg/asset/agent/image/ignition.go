@@ -255,7 +255,6 @@ func (a *Ignition) Generate(dependencies asset.Parents) error {
 		osImage,
 		infraEnv.Spec.Proxy,
 		imageTypeISO,
-		keyPairAsset.PrivateKey,
 		keyPairAsset.PublicKey,
 		caBundleMount)
 
@@ -372,9 +371,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 	infraEnvID string,
 	osImage *models.OsImage,
 	proxy *v1beta1.Proxy,
-	imageTypeISO,
-	privateKey, publicKey string,
-	caBundleMount string) *agentTemplateData {
+	imageTypeISO, publicKey, caBundleMount string) *agentTemplateData {
 	return &agentTemplateData{
 		ServiceProtocol:           "http",
 		PullSecret:                pullSecret,
@@ -390,7 +387,6 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 		OSImage:                   osImage,
 		Proxy:                     proxy,
 		ImageTypeISO:              imageTypeISO,
-		PrivateKeyPEM:             privateKey,
 		PublicKeyPEM:              publicKey,
 		CaBundleMount:             caBundleMount,
 	}
@@ -412,8 +408,9 @@ func getRendezvousHostEnv(serviceProtocol, nodeZeroIP, token string, workflowTyp
 SERVICE_BASE_URL=%s
 IMAGE_SERVICE_BASE_URL=%s
 AGENT_AUTH_TOKEN=%s
+PULL_SECRET_TOKEN=%s
 WORKFLOW_TYPE=%s
-`, nodeZeroIP, serviceBaseURL.String(), imageServiceBaseURL.String(), token, workflowType)
+`, nodeZeroIP, serviceBaseURL.String(), imageServiceBaseURL.String(), token, token, workflowType)
 }
 
 func getAddNodesEnv(clusterInfo joiner.ClusterInfo) string {
