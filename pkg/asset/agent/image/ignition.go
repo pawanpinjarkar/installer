@@ -256,7 +256,6 @@ func (a *Ignition) Generate(dependencies asset.Parents) error {
 		osImage,
 		infraEnv.Spec.Proxy,
 		imageTypeISO,
-		keyPairAsset.PrivateKey,
 		keyPairAsset.PublicKey,
 		keyPairAsset.Token,
 		caBundleMount)
@@ -374,9 +373,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 	infraEnvID string,
 	osImage *models.OsImage,
 	proxy *v1beta1.Proxy,
-	imageTypeISO,
-	privateKey, publicKey, token string,
-	caBundleMount string) *agentTemplateData {
+	imageTypeISO, publicKey, token, caBundleMount string) *agentTemplateData {
 	return &agentTemplateData{
 		ServiceProtocol:           "http",
 		PullSecret:                pullSecret,
@@ -392,7 +389,6 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 		OSImage:                   osImage,
 		Proxy:                     proxy,
 		ImageTypeISO:              imageTypeISO,
-		PrivateKeyPEM:             privateKey,
 		PublicKeyPEM:              publicKey,
 		Token:                     token,
 		CaBundleMount:             caBundleMount,
