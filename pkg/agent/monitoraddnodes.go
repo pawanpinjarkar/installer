@@ -138,6 +138,9 @@ func MonitorAddNodes(cluster *Cluster, nodeIPAddress string) error {
 		}
 	}, 5*time.Second, waitContext.Done())
 
+	logrus.Info("**** sleeing")
+	time.Sleep(10 * time.Minute)
+
 	waitErr := waitContext.Err()
 	if waitErr != nil {
 		if errors.Is(waitErr, context.Canceled) {

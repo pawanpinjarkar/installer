@@ -17,8 +17,8 @@ const (
 )
 
 // NewAddNodesCommand creates a new command for add nodes.
-func NewAddNodesCommand(directory string, kubeConfig string) error {
-	err := saveParams(directory, kubeConfig)
+func NewAddNodesCommand(directory, kubeConfig, sshKey string) error {
+	err := saveParams(directory, kubeConfig, sshKey)
 	if err != nil {
 		return err
 	}
@@ -41,11 +41,12 @@ func NewAddNodesCommand(directory string, kubeConfig string) error {
 	return err
 }
 
-func saveParams(directory, kubeConfig string) error {
+func saveParams(directory, kubeConfig, sshKey string) error {
 	// Store the current parameters into the assets folder, so
 	// that they could be retrieved later by the assets
 	params := joiner.Params{
 		Kubeconfig: kubeConfig,
+		SSHKey: sshKey,
 	}
 	return params.Save(directory)
 }
