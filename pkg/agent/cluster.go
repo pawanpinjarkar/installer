@@ -15,6 +15,7 @@ import (
 
 	"github.com/openshift/assisted-service/client/installer"
 	"github.com/openshift/assisted-service/models"
+	"github.com/openshift/installer/pkg/asset/agent/gencrypto"
 	"github.com/openshift/installer/pkg/asset/agent/workflow"
 	"github.com/openshift/installer/pkg/gather/ssh"
 )
@@ -70,9 +71,19 @@ func NewCluster(ctx context.Context, assetDir, rendezvousIP, kubeconfigPath, ssh
 	czero := &Cluster{}
 	capi := &clientSet{}
 
-	authToken, err := FindAuthTokenFromAssetStore(assetDir)
-	if err != nil {
-		logrus.Fatal(err)
+	var authToken string
+	var err error
+
+	authToken, _ = FindAuthTokenFromAssetStore(assetDir) //nolint:errcheck
+
+	// authToken was not found in the asset store, retrieve it from cluster
+	if authToken == "" {
+		if kubeconfigPath != "" {
+			authToken, err = gencrypto.GetAuthTokenFromCluster(ctx, kubeconfigPath)
+			if err != nil {
+				logrus.Fatal("Required auth token neither found in asset store nor in the cluster")
+			}
+		}
 	}
 
 	restclient, err := NewNodeZeroRestClient(ctx, rendezvousIP, sshKey, authToken)
