@@ -76,14 +76,31 @@ func NewCluster(ctx context.Context, assetDir, rendezvousIP, kubeconfigPath, ssh
 
 	authToken, _ = FindAuthTokenFromAssetStore(assetDir) //nolint:errcheck
 
-	// authToken was not found in the asset store, retrieve it from cluster
-	if authToken == "" {
-		if kubeconfigPath != "" {
+	switch workflowType {
+	case workflow.AgentWorkflowTypeInstall:
+		// do nothing. The auth tokens do not expire.
+	case workflow.AgentWorkflowTypeAddNodes:
+		// authToken was not found in the asset store, retrieve it from cluster
+		if authToken == "" && kubeconfigPath != "" {
 			authToken, err = gencrypto.GetAuthTokenFromCluster(ctx, kubeconfigPath)
 			if err != nil {
 				logrus.Fatal("Required auth token neither found in asset store nor in the cluster")
 			}
 		}
+		// check if authToken is expired
+		expiryDateTime, err := gencrypto.ParseExpirationFromToken(authToken)
+		if err != nil {
+			logrus.WithError(err).Error("failed to parse token expiration time")
+		}
+		expiryTime := time.Time(*expiryDateTime)
+		if expiryTime.Before(time.Now()) {
+			err := errors.Errorf("Auth token is expired. Re-run 'add-nodes' command to create new image files(ISO/PXE files).")
+			logrus.Fatal(err)
+		}
+		logrus.Debug("Auth token is valid.")
+
+	default:
+		return nil, fmt.Errorf("AgentWorkflowType value not supported: %s", workflowType)
 	}
 
 	restclient, err := NewNodeZeroRestClient(ctx, rendezvousIP, sshKey, authToken)

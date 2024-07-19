@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/sirupsen/logrus"
@@ -35,7 +36,6 @@ var (
 // AuthConfig is an asset that generates ECDSA public/private keys, JWT token.
 type AuthConfig struct {
 	PublicKey, AgentAuthToken string
-	Client                    kubernetes.Interface
 }
 
 var _ asset.Asset = (*AuthConfig)(nil)
@@ -74,16 +74,15 @@ func (a *AuthConfig) Generate(_ context.Context, dependencies asset.Parents) err
 
 	a.PublicKey = encodedPubKeyPEM
 
-	newAgentAuthToken, err := localJWTForKey(infraEnvID.ID, privateKey)
+	newAgentAuthToken, err := localJWTForKey(infraEnvID.ID, privateKey, agentWorkflow.Workflow)
 	if err != nil {
 		return err
 	}
-	// set newly generated token
 	a.AgentAuthToken = newAgentAuthToken
 
 	switch agentWorkflow.Workflow {
 	case workflow.AgentWorkflowTypeInstall:
-		// do nothing
+		// Auth tokens do not expire
 
 	case workflow.AgentWorkflowTypeAddNodes:
 		addNodesConfig := &joiner.AddNodesConfig{}
@@ -150,15 +149,27 @@ func keyPairPEM() (string, string, error) {
 	return pubKeyPEM.String(), privKeyPEM.String(), nil
 }
 
-func localJWTForKey(id string, privateKkeyPem string) (string, error) {
+func localJWTForKey(id, privateKkeyPem string, agentWorkflow workflow.AgentWorkflowType) (string, error) {
 	priv, err := jwt.ParseECPrivateKeyFromPEM([]byte(privateKkeyPem))
 	if err != nil {
 		return "", err
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
-		string(InfraEnvKey): id,
-	})
+	var token *jwt.Token
+	switch agentWorkflow {
+	case workflow.AgentWorkflowTypeInstall:
+		token = jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+			string(InfraEnvKey): id,
+		})
+	case workflow.AgentWorkflowTypeAddNodes:
+		token = jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+			string(InfraEnvKey): id,
+			"exp":               time.Now().UTC().Add(48 * time.Hour).Unix(),
+		})
+
+	default:
+		return "", fmt.Errorf("AgentWorkflowType value not supported: %s", agentWorkflow)
+	}
 
 	tokenString, err := token.SignedString(priv)
 	if err != nil {
@@ -179,7 +190,7 @@ func (a *AuthConfig) createAuthTokenSecret(kubeconfigPath string) error {
 		return err
 	}
 	if authToken != "" {
-		// Update the token with the retrieved token from the cluster
+		// Update the token in asset store with the retrieved token from the cluster
 		a.AgentAuthToken = authToken
 	}
 	return nil
@@ -206,12 +217,14 @@ func initK8sClient(kubeconfig string) (*kubernetes.Clientset, error) {
 }
 
 func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Interface) (string, error) {
+	// check if secret exists
 	retrievedSecret, err := k8sclientset.CoreV1().Secrets(authTokenSecretNamespace).Get(context.Background(), authTokenSecretName, metav1.GetOptions{})
 
 	// if the secret does not exist
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Secret does not exist, create the secret and set it with the new agent auth token
+			// Create the secret with the new JWT token having an exp claim of 48 hours
+			// i.e. the token will be valid for next 48 hours
 			err = createSecret(k8sclientset, a.AgentAuthToken)
 			if err != nil {
 				return "", err
@@ -222,32 +235,72 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 		return "", fmt.Errorf("failed to get required auth token secret from the cluster: %w", err)
 	}
 
-	authToken, err := getSecret(retrievedSecret)
+	// the secret does exist
+	var authToken string
+
+	createdAtStr := retrievedSecret.Annotations["createdAt"]
+	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
 	if err != nil {
 		return "", err
 	}
+	// if the secret with JWT token is older than 24 hours
+	// update the secret with a new JWT token with an exp claim of 48 hours
+	// i.e. the token will be valid for next 48 hours
+	if time.Since(createdAt) > 24*time.Hour {
+		err = updateSecret(k8sclientset, retrievedSecret, a.AgentAuthToken)
+		if err != nil {
+			return "", err
+		}
+		logrus.Debug("auth token secret regenerated and updated in the cluster")
+	} else {
+		logrus.Debug("auth token secret is still valid")
+		authToken, err = getSecret(retrievedSecret)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return authToken, err
 }
 
 func createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) error {
-	// Encode the token in base64
-	encodedToken := base64.StdEncoding.EncodeToString([]byte(newAgentAuthToken))
-
+	createdAt := time.Now().UTC()
+	expiresAt := createdAt.Add(48 * time.Hour)
 	// Create a Secret
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: authTokenSecretName,
+			Annotations: map[string]string{
+				"createdAt": createdAt.Format(time.RFC3339),
+				"expiresAt": expiresAt.Format(time.RFC3339),
+				"updatedAt": "", // Initially set to empty
+			},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			authTokenSecretDataKey: []byte(encodedToken),
+			authTokenSecretDataKey: []byte(newAgentAuthToken),
 		},
 	}
 	_, err := k8sclientset.CoreV1().Secrets(authTokenSecretNamespace).Create(context.Background(), secret, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create Secret: %w", err)
+		return fmt.Errorf("failed to create auth token secret: %w", err)
 	}
 
+	return nil
+}
+
+func updateSecret(k8sclientset kubernetes.Interface, retrievedSecret *corev1.Secret, newAgentAuthToken string) error {
+	retrievedSecret.Data[authTokenSecretDataKey] = []byte(newAgentAuthToken)
+
+	updatedAt := time.Now().UTC()
+	expiresAt := updatedAt.Add(48 * time.Hour)
+	retrievedSecret.Annotations["updatedAt"] = updatedAt.Format(time.RFC3339)
+	retrievedSecret.Annotations["expiresAt"] = expiresAt.Format(time.RFC3339)
+
+	_, err := k8sclientset.CoreV1().Secrets(authTokenSecretNamespace).Update(context.TODO(), retrievedSecret, metav1.UpdateOptions{})
+	if err != nil {
+		logrus.Fatal(err)
+	}
 	return nil
 }
 
@@ -271,20 +324,14 @@ func GetAuthTokenFromCluster(ctx context.Context, kubeconfigPath string) (string
 
 func getSecret(retrievedSecret *corev1.Secret) (string, error) {
 	// Check if the secret data contains the expected key
-	retrievedEncodedToken, exists := retrievedSecret.Data[authTokenSecretDataKey]
+	existingAgentAuthToken, exists := retrievedSecret.Data[authTokenSecretDataKey]
 	if !exists {
-		return "", fmt.Errorf("auth token secret does not contain the key %s", authTokenSecretDataKey)
-	}
-
-	// Decode the token from the Secret
-	existingAgentAuthToken, err := base64.StdEncoding.DecodeString(string(retrievedEncodedToken))
-	if err != nil {
-		return "", fmt.Errorf("failed to decode the auth token secret token from the cluster: %w", err)
+		logrus.Fatalf("auth token secret %s does not contain the key %s", authTokenSecretName, authTokenSecretDataKey)
 	}
 
 	// Check if secret is set to empty string in the cluster
 	if len(existingAgentAuthToken) == 0 {
-		return "", fmt.Errorf("required auth token secret in the cluster found empty")
+		logrus.Fatalf("auth token secret %s found to be empty", authTokenSecretName)
 	}
 	return string(existingAgentAuthToken), nil
 }

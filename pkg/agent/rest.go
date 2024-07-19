@@ -135,7 +135,10 @@ func FindAuthTokenFromAssetStore(assetDir string) (string, error) {
 		return "", errors.New("failed to load AuthConfig")
 	}
 
-	authToken := authConfig.(*gencrypto.AuthConfig).AgentAuthToken
+	var authToken string
+	if authConfig != nil {
+		authToken = authConfig.(*gencrypto.AuthConfig).AgentAuthToken
+	}
 
 	return authToken, nil
 }

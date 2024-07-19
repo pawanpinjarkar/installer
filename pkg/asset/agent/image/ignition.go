@@ -77,6 +77,7 @@ type agentTemplateData struct {
 	PublicKeyPEM              string
 	Token                     string
 	CaBundleMount             string
+	AgentWorkflowType         string
 }
 
 // Name returns the human-friendly name of the asset.
@@ -263,7 +264,8 @@ func (a *Ignition) Generate(_ context.Context, dependencies asset.Parents) error
 		imageTypeISO,
 		keyPairAsset.PublicKey,
 		keyPairAsset.AgentAuthToken,
-		caBundleMount)
+		caBundleMount,
+		agentWorkflow.Workflow)
 
 	err = bootstrap.AddStorageFiles(&config, "/", "agent/files", agentTemplateData)
 	if err != nil {
@@ -378,7 +380,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 	infraEnvID string,
 	osImage *models.OsImage,
 	proxy *v1beta1.Proxy,
-	imageTypeISO, publicKey, token, caBundleMount string) *agentTemplateData {
+	imageTypeISO, publicKey, token, caBundleMount string, agentWorkflowType workflow.AgentWorkflowType) *agentTemplateData {
 	return &agentTemplateData{
 		ServiceProtocol:           "http",
 		PullSecret:                pullSecret,
@@ -397,6 +399,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 		PublicKeyPEM:              publicKey,
 		Token:                     token,
 		CaBundleMount:             caBundleMount,
+		AgentWorkflowType:         string(agentWorkflowType),
 	}
 }
 
