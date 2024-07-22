@@ -7,6 +7,8 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
+
+	"github.com/openshift/installer/pkg/asset/agent/workflow"
 )
 
 // UserAuthHeaderWriter sets the JWT authorization token.
@@ -17,21 +19,28 @@ func UserAuthHeaderWriter(token string) runtime.ClientAuthInfoWriter {
 }
 
 // ParseExpirationFromToken checks if the token is expired or not.
-func ParseExpirationFromToken(tokenString string) (*strfmt.DateTime, error) {
+func ParseExpirationFromToken(tokenString string, workflowType workflow.AgentWorkflowType) error {
 	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, errors.Errorf("malformed token claims in url")
+		return errors.Errorf("malformed token claims in url")
 	}
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return nil, errors.Errorf("token missing 'exp' claim")
-	}
-	expTime := time.Unix(int64(exp), 0)
-	expiresAt := strfmt.DateTime(expTime)
+	// Add exp claim only for add nodes workflow
+	if workflowType == workflow.AgentWorkflowTypeAddNodes {
+		exp, ok := claims["exp"].(float64)
+		if !ok {
+			return errors.Errorf("token missing 'exp' claim")
+		}
+		expTime := time.Unix(int64(exp), 0)
+		expiresAt := strfmt.DateTime(expTime)
 
-	return &expiresAt, nil
+		expiryTime := time.Time(expiresAt)
+		if expiryTime.Before(time.Now()) {
+			return errors.Errorf("Auth token is expired. Re-run 'add-nodes' command to create new image files(ISO/PXE files)")
+		}
+	}
+	return nil
 }

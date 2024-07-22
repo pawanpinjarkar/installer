@@ -27,6 +27,9 @@ import (
 	"github.com/openshift/installer/pkg/asset/agent/workflow"
 )
 
+const expiration = 48
+const expirationUnit = time.Hour
+
 var (
 	authTokenSecretNamespace = "kube-system"
 	authTokenSecretName      = "agent-auth-token" //nolint:gosec // no sensitive info
@@ -65,7 +68,7 @@ func (a *AuthConfig) Generate(_ context.Context, dependencies asset.Parents) err
 	agentWorkflow := &workflow.AgentWorkflow{}
 	dependencies.Get(infraEnvID, agentWorkflow)
 
-	publicKey, privateKey, err := keyPairPEM()
+	publicKey, privateKey, err := KeyPairPEM()
 	if err != nil {
 		return err
 	}
@@ -74,7 +77,7 @@ func (a *AuthConfig) Generate(_ context.Context, dependencies asset.Parents) err
 
 	a.PublicKey = encodedPubKeyPEM
 
-	newAgentAuthToken, err := localJWTForKey(infraEnvID.ID, privateKey, agentWorkflow.Workflow)
+	newAgentAuthToken, err := LocalJWTForKey(infraEnvID.ID, privateKey, agentWorkflow.Workflow, expiration, expirationUnit)
 	if err != nil {
 		return err
 	}
@@ -96,8 +99,6 @@ func (a *AuthConfig) Generate(_ context.Context, dependencies asset.Parents) err
 	default:
 		return fmt.Errorf("AgentWorkflowType value not supported: %s", agentWorkflow.Workflow)
 	}
-	logrus.Debugf("Using agent auth token: %s\n", a.AgentAuthToken)
-
 	return nil
 }
 
@@ -106,7 +107,8 @@ func (*AuthConfig) Name() string {
 	return "Agent Installer API Auth Config"
 }
 
-func keyPairPEM() (string, string, error) {
+// KeyPairPEM returns the public, private keys in PEM format.
+func KeyPairPEM() (string, string, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", "", err
@@ -149,7 +151,8 @@ func keyPairPEM() (string, string, error) {
 	return pubKeyPEM.String(), privKeyPEM.String(), nil
 }
 
-func localJWTForKey(id, privateKkeyPem string, agentWorkflow workflow.AgentWorkflowType) (string, error) {
+// LocalJWTForKey returns a JWT token based on the private key.
+func LocalJWTForKey(id, privateKkeyPem string, agentWorkflow workflow.AgentWorkflowType, expiration int, expirationUnit time.Duration) (string, error) {
 	priv, err := jwt.ParseECPrivateKeyFromPEM([]byte(privateKkeyPem))
 	if err != nil {
 		return "", err
@@ -164,7 +167,7 @@ func localJWTForKey(id, privateKkeyPem string, agentWorkflow workflow.AgentWorkf
 	case workflow.AgentWorkflowTypeAddNodes:
 		token = jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
 			string(InfraEnvKey): id,
-			"exp":               time.Now().UTC().Add(48 * time.Hour).Unix(),
+			"exp":               time.Now().UTC().Add(time.Duration(expiration) * expirationUnit).Unix(),
 		})
 
 	default:
@@ -232,21 +235,21 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 			return "", nil
 		}
 		// Other errors while trying to get the secret
-		return "", fmt.Errorf("failed to get required auth token secret from the cluster: %w", err)
+		return "", fmt.Errorf("failed to get required auth token secret from the cluster: %w. Re-run 'add-nodes' command to create new image files(ISO/PXE files)", err)
 	}
 
 	// the secret does exist
 	var authToken string
 
-	createdAtStr := retrievedSecret.Annotations["createdAt"]
-	createdAt, err := time.Parse(time.RFC3339, createdAtStr)
+	updatedAtStr := retrievedSecret.Annotations["updatedAt"]
+	updatedAt, err := time.Parse(time.RFC3339, updatedAtStr)
 	if err != nil {
 		return "", err
 	}
 	// if the secret with JWT token is older than 24 hours
 	// update the secret with a new JWT token with an exp claim of 48 hours
 	// i.e. the token will be valid for next 48 hours
-	if time.Since(createdAt) > 24*time.Hour {
+	if time.Since(updatedAt) > 24*expirationUnit {
 		err = updateSecret(k8sclientset, retrievedSecret, a.AgentAuthToken)
 		if err != nil {
 			return "", err
@@ -265,7 +268,7 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 
 func createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) error {
 	createdAt := time.Now().UTC()
-	expiresAt := createdAt.Add(48 * time.Hour)
+	expiresAt := createdAt.Add(time.Duration(expiration) * expirationUnit)
 	// Create a Secret
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -273,7 +276,7 @@ func createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) e
 			Annotations: map[string]string{
 				"createdAt": createdAt.Format(time.RFC3339),
 				"expiresAt": expiresAt.Format(time.RFC3339),
-				"updatedAt": "", // Initially set to empty
+				"updatedAt": createdAt.Format(time.RFC3339), // Initially set to same as createdAt
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -293,7 +296,7 @@ func updateSecret(k8sclientset kubernetes.Interface, retrievedSecret *corev1.Sec
 	retrievedSecret.Data[authTokenSecretDataKey] = []byte(newAgentAuthToken)
 
 	updatedAt := time.Now().UTC()
-	expiresAt := updatedAt.Add(48 * time.Hour)
+	expiresAt := updatedAt.Add(expiration * expirationUnit)
 	retrievedSecret.Annotations["updatedAt"] = updatedAt.Format(time.RFC3339)
 	retrievedSecret.Annotations["expiresAt"] = expiresAt.Format(time.RFC3339)
 
@@ -326,12 +329,12 @@ func getSecret(retrievedSecret *corev1.Secret) (string, error) {
 	// Check if the secret data contains the expected key
 	existingAgentAuthToken, exists := retrievedSecret.Data[authTokenSecretDataKey]
 	if !exists {
-		logrus.Fatalf("auth token secret %s does not contain the key %s", authTokenSecretName, authTokenSecretDataKey)
+		logrus.Fatalf("auth token secret %s does not contain the key %s. Re-run 'add-nodes' command to create new image files(ISO/PXE files)", authTokenSecretName, authTokenSecretDataKey)
 	}
 
 	// Check if secret is set to empty string in the cluster
 	if len(existingAgentAuthToken) == 0 {
-		logrus.Fatalf("auth token secret %s found to be empty", authTokenSecretName)
+		logrus.Fatalf("auth token secret %s found to be empty. Re-run 'add-nodes' command to create new image files(ISO/PXE files)", authTokenSecretName)
 	}
 	return string(existingAgentAuthToken), nil
 }

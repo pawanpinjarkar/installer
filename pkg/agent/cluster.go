@@ -84,17 +84,12 @@ func NewCluster(ctx context.Context, assetDir, rendezvousIP, kubeconfigPath, ssh
 		if authToken == "" && kubeconfigPath != "" {
 			authToken, err = gencrypto.GetAuthTokenFromCluster(ctx, kubeconfigPath)
 			if err != nil {
-				logrus.Fatal("Required auth token neither found in asset store nor in the cluster")
+				logrus.Fatal("Required auth token neither found in asset store nor in the cluster. Re-run 'add-nodes' command to create new image files(ISO/PXE files)")
 			}
 		}
 		// check if authToken is expired
-		expiryDateTime, err := gencrypto.ParseExpirationFromToken(authToken)
+		err := gencrypto.ParseExpirationFromToken(authToken, workflowType)
 		if err != nil {
-			logrus.WithError(err).Error("failed to parse token expiration time")
-		}
-		expiryTime := time.Time(*expiryDateTime)
-		if expiryTime.Before(time.Now()) {
-			err := errors.Errorf("Auth token is expired. Re-run 'add-nodes' command to create new image files(ISO/PXE files).")
 			logrus.Fatal(err)
 		}
 		logrus.Debug("Auth token is valid.")

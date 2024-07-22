@@ -94,7 +94,7 @@ func TestIgnition_getTemplateData(t *testing.T) {
 	publicKey := "-----BEGIN EC PUBLIC KEY-----\nMHcCAQEEIOSCfDNmx0qe6dncV4tg==\n-----END EC PUBLIC KEY-----\n"
 	token := "someToken"
 
-	templateData := getTemplateData(clusterName, pullSecret, releaseImageList, releaseImage, releaseImageMirror, haveMirrorConfig, publicContainerRegistries, agentClusterInstall.Spec.ProvisionRequirements.ControlPlaneAgents, agentClusterInstall.Spec.ProvisionRequirements.WorkerAgents, infraEnvID, osImage, proxy, "minimal-iso", publicKey, token, "")
+	templateData := getTemplateData(clusterName, pullSecret, releaseImageList, releaseImage, releaseImageMirror, haveMirrorConfig, publicContainerRegistries, agentClusterInstall.Spec.ProvisionRequirements.ControlPlaneAgents, agentClusterInstall.Spec.ProvisionRequirements.WorkerAgents, infraEnvID, osImage, proxy, "minimal-iso", publicKey, token, "", workflow.AgentWorkflowTypeAddNodes)
 	assert.Equal(t, clusterName, templateData.ClusterName)
 	assert.Equal(t, "http", templateData.ServiceProtocol)
 	assert.Equal(t, pullSecret, templateData.PullSecret)
@@ -110,6 +110,8 @@ func TestIgnition_getTemplateData(t *testing.T) {
 	assert.Equal(t, proxy, templateData.Proxy)
 	assert.Equal(t, publicKey, templateData.PublicKeyPEM)
 	assert.Equal(t, token, templateData.Token)
+	assert.Equal(t, string(workflow.AgentWorkflowTypeAddNodes), templateData.AgentWorkflowType)
+
 }
 
 func TestIgnition_getRendezvousHostEnv(t *testing.T) {
