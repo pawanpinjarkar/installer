@@ -1,10 +1,10 @@
 [Unit]
 Description=Adds the current node to an already existing cluster
 Wants=network-online.target
-Requires=apply-host-config.service
+Requires=apply-host-config.service agent-verify-auth-token-expiry.service
 Conflicts=start-cluster-installation.service
 PartOf=assisted-service-pod.service
-After=network-online.target apply-host-config.service
+After=network-online.target apply-host-config.service agent-verify-auth-token-expiry.service
 ConditionPathExists=/etc/assisted/node0
 ConditionPathExists=/etc/assisted/add-nodes.env
 

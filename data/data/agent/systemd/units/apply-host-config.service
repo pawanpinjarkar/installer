@@ -3,7 +3,8 @@ Description=Service that applies host-specific configuration
 Wants=network-online.target
 Requires=agent-register-infraenv.service
 PartOf=assisted-service-pod.service
-After=network-online.target agent-register-infraenv.service
+After=network-online.target agent-register-infraenv.service agent-verify-auth-token-expiry.service
+Requires=agent-verify-auth-token-expiry.service
 ConditionPathExists=/etc/assisted/node0
 
 [Service]

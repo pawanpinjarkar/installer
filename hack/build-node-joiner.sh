@@ -14,7 +14,7 @@ if [ "$(version "${current_go_version#go}")" -lt "$(version "$minimum_go_version
 fi
 
 export CGO_ENABLED=0
-MODE="${MODE:-release}"
+MODE="${MODE:-dev}"
 
 GIT_COMMIT="${SOURCE_GIT_COMMIT:-$(git rev-parse --verify 'HEAD^{commit}')}"
 GIT_TAG="${BUILD_VERSION:-$(git describe --always --abbrev=40 --dirty)}"

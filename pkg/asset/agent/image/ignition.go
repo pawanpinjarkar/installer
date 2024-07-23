@@ -76,6 +76,7 @@ type agentTemplateData struct {
 	ImageTypeISO              string
 	PublicKeyPEM              string
 	Token                     string
+	TokenExpiry               string
 	CaBundleMount             string
 	AgentWorkflowType         string
 }
@@ -264,6 +265,7 @@ func (a *Ignition) Generate(_ context.Context, dependencies asset.Parents) error
 		imageTypeISO,
 		keyPairAsset.PublicKey,
 		keyPairAsset.AgentAuthToken,
+		keyPairAsset.AgentAuthTokenExpiry,
 		caBundleMount,
 		agentWorkflow.Workflow)
 
@@ -338,6 +340,7 @@ func getDefaultEnabledServices() []string {
 		"agent-register-cluster.service",
 		"agent-import-cluster.service",
 		"agent-register-infraenv.service",
+		"agent-verify-auth-token-expiry.service",
 		"agent.service",
 		"assisted-service-db.service",
 		"assisted-service-pod.service",
@@ -380,7 +383,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 	infraEnvID string,
 	osImage *models.OsImage,
 	proxy *v1beta1.Proxy,
-	imageTypeISO, publicKey, token, caBundleMount string, agentWorkflowType workflow.AgentWorkflowType) *agentTemplateData {
+	imageTypeISO, publicKey, token, tokenExpiry, caBundleMount string, agentWorkflowType workflow.AgentWorkflowType) *agentTemplateData {
 	return &agentTemplateData{
 		ServiceProtocol:           "http",
 		PullSecret:                pullSecret,
@@ -398,6 +401,7 @@ func getTemplateData(name, pullSecret, releaseImageList, releaseImage,
 		ImageTypeISO:              imageTypeISO,
 		PublicKeyPEM:              publicKey,
 		Token:                     token,
+		TokenExpiry:               tokenExpiry,
 		CaBundleMount:             caBundleMount,
 		AgentWorkflowType:         string(agentWorkflowType),
 	}

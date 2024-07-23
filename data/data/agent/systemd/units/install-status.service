@@ -1,7 +1,8 @@
 [Unit]
 Description=Service that monitors host-specific configuration status
 Wants=network-online.target agent-register-infraenv.service
-After=network-online.target agent-register-infraenv.service
+After=network-online.target agent-register-infraenv.service agent-verify-auth-token-expiry.service
+Requires=agent-verify-auth-token-expiry.service
 ConditionPathExists=/etc/assisted/node0
 
 [Service]

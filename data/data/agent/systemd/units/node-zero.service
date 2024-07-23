@@ -1,7 +1,8 @@
 [Unit]
 Description=Identify node zero to run OpenShift Assisted Installation Service on
 Wants=network-online.target
-After=network-online.target
+After=network-online.target agent-verify-auth-token-expiry.service
+Requires=agent-verify-auth-token-expiry.service
 
 [Service]
 Type=oneshot

@@ -11,7 +11,8 @@ ExecStart=/usr/local/bin/start-agent.sh
 [Unit]
 Description=Assisted Installer Agent
 Wants=network-online.target set-hostname.service
-After=network-online.target set-hostname.service
+After=network-online.target set-hostname.service agent-verify-auth-token-expiry.service
+Requires=agent-verify-auth-token-expiry.service
 
 [Install]
 WantedBy=multi-user.target

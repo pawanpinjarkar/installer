@@ -1,0 +1,13 @@
+[Unit]
+Description=Verifies if token is expired
+Wants=network-online.target
+After=network-online.target agent-interactive-console.service
+
+[Service]
+Type=simple
+EnvironmentFile=/usr/local/share/assisted-service/assisted-service.env
+ExecStart=/usr/local/bin/agent-verify-auth-token-expiry.sh
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

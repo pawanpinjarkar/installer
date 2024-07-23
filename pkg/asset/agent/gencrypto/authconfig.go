@@ -27,8 +27,8 @@ import (
 	"github.com/openshift/installer/pkg/asset/agent/workflow"
 )
 
-const expiration = 48
-const expirationUnit = time.Hour
+const expiration = 30
+const expirationUnit = time.Minute
 
 var (
 	authTokenSecretNamespace = "kube-system"
@@ -38,7 +38,7 @@ var (
 
 // AuthConfig is an asset that generates ECDSA public/private keys, JWT token.
 type AuthConfig struct {
-	PublicKey, AgentAuthToken string
+	PublicKey, AgentAuthToken, AgentAuthTokenExpiry string
 }
 
 var _ asset.Asset = (*AuthConfig)(nil)
@@ -228,7 +228,7 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 		if errors.IsNotFound(err) {
 			// Create the secret with the new JWT token having an exp claim of 48 hours
 			// i.e. the token will be valid for next 48 hours
-			err = createSecret(k8sclientset, a.AgentAuthToken)
+			err = a.createSecret(k8sclientset, a.AgentAuthToken)
 			if err != nil {
 				return "", err
 			}
@@ -249,14 +249,15 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 	// if the secret with JWT token is older than 24 hours
 	// update the secret with a new JWT token with an exp claim of 48 hours
 	// i.e. the token will be valid for next 48 hours
-	if time.Since(updatedAt) > 24*expirationUnit {
-		err = updateSecret(k8sclientset, retrievedSecret, a.AgentAuthToken)
+	if time.Since(updatedAt) > 10*expirationUnit {
+		err = a.updateSecret(k8sclientset, retrievedSecret, a.AgentAuthToken)
 		if err != nil {
 			return "", err
 		}
 		logrus.Debug("auth token secret regenerated and updated in the cluster")
 	} else {
 		logrus.Debug("auth token secret is still valid")
+		a.AgentAuthTokenExpiry = retrievedSecret.Annotations["expiresAt"]
 		authToken, err = getSecret(retrievedSecret)
 		if err != nil {
 			return "", err
@@ -266,9 +267,10 @@ func (a *AuthConfig) getOrCreateAuthTokenFromSecret(k8sclientset kubernetes.Inte
 	return authToken, err
 }
 
-func createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) error {
+func (a *AuthConfig) createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) error {
 	createdAt := time.Now().UTC()
 	expiresAt := createdAt.Add(time.Duration(expiration) * expirationUnit)
+	a.AgentAuthTokenExpiry = expiresAt.Format(time.RFC3339)
 	// Create a Secret
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -292,11 +294,13 @@ func createSecret(k8sclientset kubernetes.Interface, newAgentAuthToken string) e
 	return nil
 }
 
-func updateSecret(k8sclientset kubernetes.Interface, retrievedSecret *corev1.Secret, newAgentAuthToken string) error {
+func (a *AuthConfig) updateSecret(k8sclientset kubernetes.Interface, retrievedSecret *corev1.Secret, newAgentAuthToken string) error {
 	retrievedSecret.Data[authTokenSecretDataKey] = []byte(newAgentAuthToken)
 
 	updatedAt := time.Now().UTC()
 	expiresAt := updatedAt.Add(expiration * expirationUnit)
+	a.AgentAuthTokenExpiry = expiresAt.Format(time.RFC3339)
+
 	retrievedSecret.Annotations["updatedAt"] = updatedAt.Format(time.RFC3339)
 	retrievedSecret.Annotations["expiresAt"] = expiresAt.Format(time.RFC3339)
 

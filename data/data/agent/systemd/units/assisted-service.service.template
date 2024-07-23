@@ -2,9 +2,9 @@
 Description=Assisted Service container
 Wants=network.target
 RequiresMountsFor=%t/containers
-Requires=assisted-service-db.service
+Requires=assisted-service-db.service agent-verify-auth-token-expiry.service
 BindsTo=assisted-service-pod.service
-After=network-online.target assisted-service-pod.service
+After=network-online.target assisted-service-pod.service agent-verify-auth-token-expiry.service
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n

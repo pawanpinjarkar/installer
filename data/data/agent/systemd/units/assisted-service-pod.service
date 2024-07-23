@@ -1,10 +1,10 @@
 [Unit]
 Description=Assisted Service pod
 Wants=network.target node-zero.service
-After=network-online.target node-zero.service
+After=network-online.target node-zero.service agent-verify-auth-token-expiry.service
 ConditionPathExists=/etc/assisted/node0
 RequiresMountsFor=
-Requires=assisted-service-db.service assisted-service.service
+Requires=assisted-service-db.service assisted-service.service agent-verify-auth-token-expiry.service
 Before=assisted-service-db.service assisted-service.service
 
 [Service]

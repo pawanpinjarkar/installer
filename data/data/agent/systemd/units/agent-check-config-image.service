@@ -1,7 +1,7 @@
 [Unit]
 Description=Displays message to console if config image has not been inserted or mounted in unconfigured-ignition environment
 Wants=network-online.target
-After=network-online.target
+After=network-online.target agent-verify-auth-token-expiry.service
 
 [Service]
 Type=oneshot
