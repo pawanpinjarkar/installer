@@ -191,6 +191,8 @@ func (a *Ignition) Generate(_ context.Context, dependencies asset.Parents) error
 		numWorkers = len(addNodesConfig.Config.Hosts)
 		// Enable add-nodes specific services
 		enabledServices = append(enabledServices, "agent-add-node.service")
+		// Enable auth token expiration specific service
+		enabledServices = append(enabledServices, "agent-verify-auth-token-expiry.service")
 		// Generate add-nodes.env file
 		addNodesEnvFile := ignition.FileFromString(addNodesEnvPath, "root", 0644, getAddNodesEnv(*clusterInfo))
 		config.Storage.Files = append(config.Storage.Files, addNodesEnvFile)
@@ -340,7 +342,6 @@ func getDefaultEnabledServices() []string {
 		"agent-register-cluster.service",
 		"agent-import-cluster.service",
 		"agent-register-infraenv.service",
-		"agent-verify-auth-token-expiry.service",
 		"agent.service",
 		"assisted-service-db.service",
 		"assisted-service-pod.service",
